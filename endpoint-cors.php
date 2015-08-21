@@ -22,29 +22,27 @@
  * If you need to install the AWS SDK, see http://docs.aws.amazon.com/aws-sdk-php-2/guide/latest/installation.html.
  */
 
-// You can remove these two lines if you are not using Fine Uploader's
-// delete file feature
-require 'aws-autoloader.php';
+require 'vendor/autoload.php';
 use Aws\S3\S3Client;
 
 // These assume you have the associated AWS keys stored in
 // the associated system environment variables
-$clientPrivateKey = $_SERVER['AWS_SECRET_KEY'];
+$clientPrivateKey = $_ENV['AWS_CLIENT_SECRET_KEY'];
 // These two keys are only needed if the delete file feature is enabled
 // or if you are, for example, confirming the file size in a successEndpoint
 // handler via S3's SDK, as we are doing in this example.
-$serverPublicKey = $_SERVER['PARAM1'];
-$serverPrivateKey = $_SERVER['PARAM2'];
+$serverPublicKey = $_ENV['AWS_SERVER_PUBLIC_KEY'];
+$serverPrivateKey = $_ENV['AWS_SERVER_PRIVATE_KEY'];
 
 // The following variables are used when validating the policy document
-// sent by the uploader: 
-$expectedBucketName = "upload.fineuploader.com";
+// sent by the uploader. 
+$expectedBucketName = $_ENV['S3_BUCKET_NAME'];
 // $expectedMaxSize is the value you set the sizeLimit property of the 
 // validation option. We assume it is `null` here. If you are performing
 // validation, then change this to match the integer value you specified
 // otherwise your policy document will be invalid.
 // http://docs.fineuploader.com/branch/develop/api/options.html#validation-option
-$expectedMaxSize = 15000000;
+$expectedMaxSize = (isset($_ENV['S3_MAX_FILE_SIZE']) ? $_ENV['S3_MAX_FILE_SIZE'] : null);
 
 $method = getRequestMethod();
 
