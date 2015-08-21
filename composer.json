@@ -2,7 +2,7 @@
     "name": "fineuploader/php-s3-server",
     "description": "Endpoint handler for Fine Uploader S3's server requests.",
     "homepage": "http://fineuploader.com",
-    "license": "MIT"
+    "license": "MIT",
     "require": {
         "aws/aws-sdk-php": "2.*"
   }
