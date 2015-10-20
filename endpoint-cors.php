@@ -90,8 +90,8 @@ function getRequestMethod() {
     	parse_str($HTTP_RAW_POST_DATA, $_POST);
     }
 
-    if (isset($_POST['_method'])) {
-        return $_POST['_method'];
+    if (isset($_REQUEST['_method'])) {
+        return $_REQUEST['_method'];
     }
 
     return $_SERVER['REQUEST_METHOD'];
@@ -143,7 +143,11 @@ function signRequest() {
 }
 
 function signRestRequest($headersStr) {
-    if (isValidRestRequest($headersStr)) {
+    if (isset($_REQUEST["v4"])) {
+        $response = array('signature' => signV4RestRequest($headersStr));
+        echo json_encode($response);
+    }
+    else if (isValidRestRequest($headersStr)) {
         $response = array('signature' => sign($headersStr));
         echo json_encode($response);
     }
@@ -166,7 +170,12 @@ function signPolicy($policyStr) {
 
     if (isPolicyValid($policyObj)) {
         $encodedPolicy = base64_encode($policyStr);
-        $response = array('policy' => $encodedPolicy, 'signature' => sign($encodedPolicy));
+        if (isset($_REQUEST["v4"])) {
+            $response = array('policy' => $encodedPolicy, 'signature' => signV4Policy($encodedPolicy, $policyObj));
+        }
+        else {
+            $response = array('policy' => $encodedPolicy, 'signature' => sign($encodedPolicy));
+        }
         echo json_encode($response);
     }
     else {
@@ -206,12 +215,46 @@ function sign($stringToSign) {
         ));
 }
 
+function signV4Policy($stringToSign, $policyObj) {
+    global $clientPrivateKey;
+
+    foreach ($policyObj["conditions"] as $condition) {
+        if (isset($condition["x-amz-credential"])) {
+            $credentialCondition = $condition["x-amz-credential"];
+        }
+    }
+
+    $pattern = "/.+\/(.+)\\/(.+)\/s3\/aws4_request/";
+    preg_match($pattern, $credentialCondition, $matches);
+
+    $dateKey = hash_hmac('sha256', $matches[1], 'AWS4' . $clientPrivateKey, true);
+    $dateRegionKey = hash_hmac('sha256', $matches[2], $dateKey, true);
+    $dateRegionServiceKey = hash_hmac('sha256', 's3', $dateRegionKey, true);
+    $signingKey = hash_hmac('sha256', 'aws4_request', $dateRegionServiceKey, true);
+
+    return hash_hmac('sha256', $stringToSign, $signingKey);
+}
+
+function signV4RestRequest($stringToSign) {
+    global $clientPrivateKey;
+
+    $pattern = "/.+\\n.+\\n(\\d+)\/(.+)\/s3\/.+\\n(.+)/";
+    preg_match($pattern, $stringToSign, $matches);
+
+    $dateKey = hash_hmac('sha256', $matches[1], 'AWS4' . $clientPrivateKey, true);
+    $dateRegionKey = hash_hmac('sha256', $matches[2], $dateKey, true);
+    $dateRegionServiceKey = hash_hmac('sha256', 's3', $dateRegionKey, true);
+    $signingKey = hash_hmac('sha256', 'aws4_request', $dateRegionServiceKey, true);
+
+    return hash_hmac('sha256', $stringToSign, $signingKey);
+}
+
 // This is not needed if you don't require a callback on upload success.
 function verifyFileInS3($includeThumbnail) {
     global $expectedMaxSize;
 
-    $bucket = $_POST["bucket"];
-    $key = $_POST["key"];
+    $bucket = $_REQUEST["bucket"];
+    $key = $_REQUEST["key"];
 
     // If utilizing CORS, we return a 200 response with the error message in the body
     // to ensure Fine Uploader can parse the error message in IE9 and IE8,
@@ -268,8 +311,8 @@ function isFileViewableImage($filename) {
 // (which is our goal here - keep it simple) we only include a link to
 // a viewable image and only if the browser is not capable of generating a client-side preview.
 function shouldIncludeThumbnail() {
-    $filename = $_POST["name"];
-    $isPreviewCapable = $_POST["isBrowserPreviewCapable"] == "true";
+    $filename = $_REQUEST["name"];
+    $isPreviewCapable = $_REQUEST["isBrowserPreviewCapable"] == "true";
     $isFileViewableImage = isFileViewableImage($filename);
 
     return !$isPreviewCapable && $isFileViewableImage;
