@@ -36,6 +36,7 @@ $serverPrivateKey = $_ENV['AWS_SERVER_PRIVATE_KEY'];
 // The following variables are used when validating the policy document
 // sent by the uploader. 
 $expectedBucketName = $_ENV['S3_BUCKET_NAME'];
+$expectedHostName = $_ENV['S3_HOST_NAME']; // v4-only
 // $expectedMaxSize is the value you set the sizeLimit property of the 
 // validation option. We assume it is `null` here. If you are performing
 // validation, then change this to match the integer value you specified
@@ -115,12 +116,15 @@ function signRequest() {
 }
 
 function signRestRequest($headersStr) {
-    if (isset($_REQUEST["v4"])) {
-        $response = array('signature' => signV4RestRequest($headersStr));
-        echo json_encode($response);
-    }
-    else if (isValidRestRequest($headersStr)) {
-        $response = array('signature' => sign($headersStr));
+    $version = isset($_REQUEST["v4"]) ? 4 : 2;
+    if (isValidRestRequest($headersStr, $version)) {
+        if ($version == 4) {
+            $response = array('signature' => signV4RestRequest($headersStr));
+        }
+        else {
+            $response = array('signature' => sign($headersStr));
+        }
+
         echo json_encode($response);
     }
     else {
@@ -128,10 +132,16 @@ function signRestRequest($headersStr) {
     }
 }
 
-function isValidRestRequest($headersStr) {
-    global $expectedBucketName;
+function isValidRestRequest($headersStr, $version) {
+    if ($version == 2) {
+        global $expectedBucketName;
+        $pattern = "/\/$expectedBucketName\/";
+    }
+    else {
+        global $expectedHostName;
+        $pattern = "/host:$expectedHostName/";
+    }
 
-    $pattern = "/\/$expectedBucketName\/.+$/";
     preg_match($pattern, $headersStr, $matches);
 
     return count($matches) > 0;
@@ -209,11 +219,14 @@ function signV4Policy($stringToSign, $policyObj) {
     return hash_hmac('sha256', $stringToSign, $signingKey);
 }
 
-function signV4RestRequest($stringToSign) {
+function signV4RestRequest($rawStringToSign) {
     global $clientPrivateKey;
 
-    $pattern = "/.+\\n.+\\n(\\d+)\/(.+)\/s3\/.+\\n(.+)/";
-    preg_match($pattern, $stringToSign, $matches);
+    $pattern = "/.+\\n.+\\n(\\d+)\/(.+)\/s3\/aws4_request\\n(.+)/s";
+    preg_match($pattern, $rawStringToSign, $matches);
+
+    $hashedCanonicalRequest = hash('sha256', $matches[3]);
+    $stringToSign = preg_replace("/^(.+)\/s3\/aws4_request\\n.+$/s", '$1/s3/aws4_request'."\n".$hashedCanonicalRequest, $rawStringToSign);
 
     $dateKey = hash_hmac('sha256', $matches[1], 'AWS4' . $clientPrivateKey, true);
     $dateRegionKey = hash_hmac('sha256', $matches[2], $dateKey, true);
