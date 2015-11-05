@@ -163,7 +163,7 @@ function signRestRequest($headersStr) {
 function isValidRestRequest($headersStr, $version) {
     if ($version == 2) {
         global $expectedBucketName;
-        $pattern = "/\/$expectedBucketName\/";
+        $pattern = "/\/$expectedBucketName\/.+$/";
     }
     else {
         global $expectedHostName;
