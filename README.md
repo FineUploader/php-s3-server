@@ -1,5 +1,5 @@
 # php-s3-server
-[![Gitter](https://img.shields.io/gitter/room/nwjs/nw.js.svg?maxAge=2592000)](https://gitter.im/FineUploader?utm_source=share-link&utm_medium=link&utm_campaign=share-link)
+[![Freenode](https://img.shields.io/badge/chat-on%20freenode-brightgreen.svg)](irc://chat.freenode.net/#fineuploader)
 
 PHP-based server-side example for handling signature, delete, etc endpoint requests from Fine Uploader S3.
 
