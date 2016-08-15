@@ -1,5 +1,5 @@
 # php-s3-server
-[![Freenode](https://img.shields.io/badge/chat-on%20freenode-brightgreen.svg)](irc://chat.freenode.net/#fineuploader)
+[![Packagist](https://img.shields.io/packagist/dt/fineuploader/php-s3-server.svg?maxAge=2592000)](https://packagist.org/packages/fineuploader/php-s3-server)
 
 PHP-based server-side example for handling signature, delete, etc endpoint requests from Fine Uploader S3.
 
