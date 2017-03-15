@@ -17,9 +17,13 @@
  *
  * Requirements:
  *  - PHP 5.3 or newer
- *  - Amazon PHP SDK (only if utilizing the AWS SDK for deleting files or otherwise examining them)
+ *  - Amazon PHP SDK V3 (only if utilizing the AWS SDK for deleting files or otherwise examining them)
  *
- * If you need to install the AWS SDK, see http://docs.aws.amazon.com/aws-sdk-php-2/guide/latest/installation.html.
+ * If you need to install the AWS SDK, see https://docs.aws.amazon.com/aws-sdk-php/v3/guide/getting-started/installation.html .
+ *
+ * Updated to AWS PHP SDK as per https://docs.aws.amazon.com/aws-sdk-php/v3/guide/guide/migration.html
+ *
+ * You will need to specify your S3 region in objectProperties, and uploadSuccess params specify region and version
  */
 
 require '../../autoload.php';
@@ -68,6 +72,10 @@ else if	($method == 'POST') {
     // and other POST requests (all requests are sent to the same endpoint in this example).
     // This condition is not needed if you don't require a callback on upload success.
     if (isset($_REQUEST["success"])) {
+        //If Region is set in uploadSuccess params then override the default us-east-1
+        $s3Region = (isset($_REQUEST["region"]) ? $_REQUEST["region"] : 'us-east-1');
+        //If (signature) version is set in uploadSuccess params then override the default 2
+        $s3Signature_version = (isset($_REQUEST["version"]) ? $_REQUEST["version"] : 2);
         verifyFileInS3(shouldIncludeThumbnail());
     }
     else {
@@ -112,12 +120,17 @@ function handlePreflight() {
 }
 
 function getS3Client() {
-    global $serverPublicKey, $serverPrivateKey;
+    global $serverPublicKey, $serverPrivateKey, $s3Region;
 
-    return S3Client::factory(array(
-        'key' => $serverPublicKey,
-        'secret' => $serverPrivateKey
-    ));
+    return new S3Client([
+        'region' => $s3Region,
+        'version' => '2006-03-01',
+        'signature_version' => $s3Signature_version,
+        'credentials' => [
+          'key' => $serverPublicKey,
+          'secret' => $serverPrivateKey
+          ]
+    ]);
 }
 
 // Only needed if the delete file feature is enabled
@@ -293,11 +306,13 @@ function verifyFileInS3($includeThumbnail) {
 
 // Provide a time-bombed public link to the file.
 function getTempLink($bucket, $key) {
-    $client = getS3Client();
-    $url = "{$bucket}/{$key}";
-    $request = $client->get($url);
-
-    return $client->createPresignedUrl($request, '+15 minutes');
+    $s3Client = getS3Client();
+    $cmd = $s3Client->getCommand('GetObject', [
+        'Bucket' => $bucket,
+        'Key'    => $key
+    ]);
+    $request = $s3Client->createPresignedRequest($cmd, '+15 minutes');
+    return $presignedUrl = (string) $request->getUri();
 }
 
 function getObjectSize($bucket, $key) {
