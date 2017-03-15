@@ -16,35 +16,40 @@
  *
  * Requirements:
  *  - PHP 5.3 or newer
- *  - Amazon PHP SDK (only if utilizing the AWS SDK for deleting files or otherwise examining them)
+ *  - Amazon PHP SDK v3 (only if utilizing the AWS SDK for deleting files or otherwise examining them)
  *
- * If you need to install the AWS SDK, see http://docs.aws.amazon.com/aws-sdk-php-2/guide/latest/installation.html.
+ * If you need to install the AWS SDK, see https://docs.aws.amazon.com/aws-sdk-php/v3/guide/getting-started/installation.html .
+ *
+ * Updated to AWS PHP SDK as per https://docs.aws.amazon.com/aws-sdk-php/v3/guide/guide/migration.html
+ *
+ * You will need to specify your S3 region in objectProperties, and uploadSuccess params specify region and version
  */
+ require '../../autoload.php';
+ use Aws\S3\S3Client;
 
-require '../../autoload.php';
-use Aws\S3\S3Client;
+ // These assume you have the associated AWS keys stored in
+ // the associated system environment variables
+ $clientPrivateKey = $_ENV['AWS_CLIENT_SECRET_KEY'];
+ // These two keys are only needed if the delete file feature is enabled
+ // or if you are, for example, confirming the file size in a successEndpoint
+ // handler via S3's SDK, as we are doing in this example.
+ $serverPublicKey = $_ENV['AWS_SERVER_PUBLIC_KEY'];
+ $serverPrivateKey = $_ENV['AWS_SERVER_PRIVATE_KEY'];
 
-// These assume you have the associated AWS keys stored in
-// the associated system environment variables
-$clientPrivateKey = $_ENV['AWS_CLIENT_SECRET_KEY'];
-// These two keys are only needed if the delete file feature is enabled
-// or if you are, for example, confirming the file size in a successEndpoint
-// handler via S3's SDK, as we are doing in this example.
-$serverPublicKey = $_ENV['AWS_SERVER_PUBLIC_KEY'];
-$serverPrivateKey = $_ENV['AWS_SERVER_PRIVATE_KEY'];
 
-// The following variables are used when validating the policy document
-// sent by the uploader. 
-$expectedBucketName = $_ENV['S3_BUCKET_NAME'];
-$expectedHostName = $_ENV['S3_HOST_NAME']; // v4-only
-// $expectedMaxSize is the value you set the sizeLimit property of the 
-// validation option. We assume it is `null` here. If you are performing
-// validation, then change this to match the integer value you specified
-// otherwise your policy document will be invalid.
-// http://docs.fineuploader.com/branch/develop/api/options.html#validation-option
-$expectedMaxSize = (isset($_ENV['S3_MAX_FILE_SIZE']) ? $_ENV['S3_MAX_FILE_SIZE'] : null);
+ // The following variables are used when validating the policy document
+ // sent by the uploader.
+ $expectedBucketName = $_ENV['S3_BUCKET_NAME'];
+ $expectedHostName = $_ENV['S3_HOST_NAME']; // v4-only
 
-$method = getRequestMethod();
+ // $expectedMaxSize is the value you set the sizeLimit property of the
+ // validation option. We assume it is `null` here. If you are performing
+ // validation, then change this to match the integer value you specified
+ // otherwise your policy document will be invalid.
+ // http://docs.fineuploader.com/branch/develop/api/options.html#validation-option
+ $expectedMaxSize = (isset($_ENV['S3_MAX_FILE_SIZE']) ? $_ENV['S3_MAX_FILE_SIZE'] : null);
+
+ $method = getRequestMethod();
 
 // This second conditional will only ever evaluate to true if
 // the delete file feature is enabled
@@ -60,6 +65,10 @@ else if	($method == 'POST') {
     // and other POST requests (all requests are sent to the same endpoint in this example).
     // This condition is not needed if you don't require a callback on upload success.
     if (isset($_REQUEST["success"])) {
+        //If Region is set in uploadSuccess params then override the default us-east-1
+        $s3Region = (isset($_REQUEST["region"]) ? $_REQUEST["region"] : 'us-east-1');
+        //If (signature) version is set in uploadSuccess params then override the default 2
+        $s3Signature_version = (isset($_REQUEST["version"]) ? $_REQUEST["version"] : 2);
         verifyFileInS3(shouldIncludeThumbnail());
     }
     else {
@@ -83,13 +92,19 @@ function getRequestMethod() {
 }
 
 function getS3Client() {
-    global $serverPublicKey, $serverPrivateKey;
+    global $serverPublicKey, $serverPrivateKey, $s3Region;
 
-    return S3Client::factory(array(
-        'key' => $serverPublicKey,
-        'secret' => $serverPrivateKey
-    ));
+    return new S3Client([
+        'region' => $s3Region,
+        'version' => '2006-03-01',
+        'signature_version' => $s3Signature_version,
+        'credentials' => [
+          'key' => $serverPublicKey,
+          'secret' => $serverPrivateKey
+          ]
+    ]);
 }
+
 
 // Only needed if the delete file feature is enabled
 function deleteObject() {
@@ -267,11 +282,17 @@ function verifyFileInS3($includeThumbnail) {
 
 // Provide a time-bombed public link to the file.
 function getTempLink($bucket, $key) {
-    $client = getS3Client();
-    $url = "{$bucket}/{$key}";
-    $request = $client->get($url);
+    $s3Client = getS3Client();
 
-    return $client->createPresignedUrl($request, '+15 minutes');
+    $cmd = $s3Client->getCommand('GetObject', [
+    'Bucket' => $bucket,
+    'Key'    => $key
+    ]);
+
+    $request = $s3Client->createPresignedRequest($cmd, '+15 minutes');
+
+    // Get the actual presigned-url
+    return $presignedUrl = (string) $request->getUri();
 }
 
 function getObjectSize($bucket, $key) {
