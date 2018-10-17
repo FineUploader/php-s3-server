@@ -106,11 +106,9 @@ function signRequest() {
     $contentAsObject = json_decode($responseBody, true);
     $jsonContent = json_encode($contentAsObject);
 
-    $headersStr = $contentAsObject["headers"];
-    if ($headersStr) {
-        signRestRequest($headersStr);
-    }
-    else {
+    if (isset($contentAsObject["headers"])) {
+        signRestRequest($contentAsObject["headers"]);
+    } else {
         signPolicy($jsonContent);
     }
 }
